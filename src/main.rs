@@ -1,5 +1,5 @@
 use anyhow::Result;
-use socketcan::CANSocket;
+use socketcan::CanSocket;
 use std::thread;
 use std::time::Duration;
 
@@ -9,7 +9,7 @@ mod types;
 
 fn main() -> Result<()> {
     // Create a CAN socket (requires `sudo ip link set can0 up type can bitrate 500000`)
-    let can = CANSocket::open("can0")?;
+    let can = CanSocket::open("can0")?;
     println!("ZLYLRR-230Pro Radar Driver started on can0...");
 
     // // Example: send vehicle state messages periodically

@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Result};
-use socketcan::{CANFrame, CANSocket};
+use socketcan::{CanFrame, CanSocket};
 
 use crate::bitpack::*;
 use crate::types::*;
 use core::cmp::min;
 
 pub fn send_vehicle_state(
-    can: &CANSocket,
+    can: &CanSocket,
     veh_speed_mps: f32,
     yaw_rate_rad_s: f32,
     gear: VehicleGear,
@@ -20,7 +20,7 @@ pub fn send_vehicle_state(
 
 // 0x141 esc_sts_run_1: lateral/longitudinal acc, yaw rate + valid bits
 pub fn send_esc_sts_run1(
-    can: &CANSocket,
+    can: &CanSocket,
     lat_acc_mps2: f32,
     lon_acc_mps2: f32,
     yaw_rate_rad_s: f32,
@@ -50,14 +50,14 @@ pub fn send_esc_sts_run1(
     set_bits_m(&mut d, 49, 1, lon_valid as u64);
     set_bits_m(&mut d, 50, 1, lat_valid as u64);
 
-    let frame = CANFrame::new(ID_ESC_RUN1, &d, false, false)?;
+    let frame = CanFrame::new(ID_ESC_RUN1, &d, false, false)?;
     can.write_frame(&frame)?;
     Ok(())
 }
 
 // 0x142 esc_sts_run_2: wheel-speed validities FL/FR/RL/RR (2 bits each)
 pub fn send_esc_sts_run2(
-    can: &CANSocket,
+    can: &CanSocket,
     fl_valid: u8,
     fr_valid: u8,
     rl_valid: u8,
@@ -68,14 +68,14 @@ pub fn send_esc_sts_run2(
     set_bits_m(&mut d, 2, 2, (fr_valid & 0x3) as u64);
     set_bits_m(&mut d, 4, 2, (rl_valid & 0x3) as u64);
     set_bits_m(&mut d, 6, 2, (rr_valid & 0x3) as u64);
-    let frame = CANFrame::new(ID_ESC_RUN2, &d, false, false)?;
+    let frame = CanFrame::new(ID_ESC_RUN2, &d, false, false)?;
     can.write_frame(&frame)?;
     Ok(())
 }
 
 // 0x221 eps_sts_run: steering angle/velocity + status bits
 pub fn send_eps_sts_run(
-    can: &CANSocket,
+    can: &CanSocket,
     angle_deg: f32,
     angle_spd_dps: f32,
     cal_ok: bool,
@@ -92,14 +92,14 @@ pub fn send_eps_sts_run(
     set_bits_m(&mut d, 30, 1, cal_ok as u64);
     set_bits_m(&mut d, 31, 1, fault as u64);
 
-    let frame = CANFrame::new(ID_EPS_RUN, &d, false, false)?;
+    let frame = CanFrame::new(ID_EPS_RUN, &d, false, false)?;
     can.write_frame(&frame)?;
     Ok(())
 }
 
 // 0x310 abs_fault_info: four wheel speeds (km/h, factor 0.05625, 13-bit each)
 pub fn send_abs_fault_info(
-    can: &CANSocket,
+    can: &CanSocket,
     fl_kmph: f32,
     fr_kmph: f32,
     rl_kmph: f32,
@@ -113,13 +113,13 @@ pub fn send_abs_fault_info(
     set_bits_m(&mut d, 43, 13, enc(rl_kmph) as u64);
     set_bits_m(&mut d, 56, 13, enc(rr_kmph) as u64);
 
-    let frame = CANFrame::new(ID_ABS_FAULT, &d, false, false)?;
+    let frame = CanFrame::new(ID_ABS_FAULT, &d, false, false)?;
     can.write_frame(&frame)?;
     Ok(())
 }
 
 // 0x330 abs_sts_run1: vehicle speed + valid
-pub fn send_abs_sts_run1(can: &CANSocket, veh_speed_mps: f32, valid: bool) -> Result<()> {
+pub fn send_abs_sts_run1(can: &CanSocket, veh_speed_mps: f32, valid: bool) -> Result<()> {
     // Spec is km/h with factor 0.05625 and 13-bit at startbit 8.
     let kmph = veh_speed_mps * 3.6;
     let mut d = [0u8; 8];
@@ -128,23 +128,23 @@ pub fn send_abs_sts_run1(can: &CANSocket, veh_speed_mps: f32, valid: bool) -> Re
     // abs_sts_veh_spd_valid at startbit 16 (1 bit): 0=Valid, 1=Invalid
     // Our boolean 'valid = true' => put 0; false => 1
     set_bits_m(&mut d, 16, 1, (!valid) as u64);
-    let frame = CANFrame::new(ID_ABS_RUN1, &d, false, false)?;
+    let frame = CanFrame::new(ID_ABS_RUN1, &d, false, false)?;
     can.write_frame(&frame)?;
     Ok(())
 }
 
 // 0x210 abs_sts_run2: gear
-pub fn send_abs_sts_run2(can: &CANSocket, gear: VehicleGear) -> Result<()> {
+pub fn send_abs_sts_run2(can: &CanSocket, gear: VehicleGear) -> Result<()> {
     let mut d = [0u8; 8];
     // vcu_sts_gear @ startbit 2, len 2:
     set_bits_m(&mut d, 2, 2, (gear as u8 & 0x3) as u64);
-    let frame = CANFrame::new(ID_ABS_RUN2, &d, false, false)?;
+    let frame = CanFrame::new(ID_ABS_RUN2, &d, false, false)?;
     can.write_frame(&frame)?;
     Ok(())
 }
 
 // Receiving/Parsing Frames
-pub fn receive_frames(can: &CANSocket) -> Result<()> {
+pub fn receive_frames(can: &CanSocket) -> Result<()> {
     // Non-blocking single read; wrap in your loop.
     if let Ok(frame) = can.read_frame() {
         let id = frame.id();
