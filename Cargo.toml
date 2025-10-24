@@ -5,5 +5,4 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
-bitfield = "0.19.3"
 socketcan = "3.5.0"
