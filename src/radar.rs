@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
-use socketcan::{CanFrame, CanSocket};
+use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Socket};
 
 use crate::bitpack::*;
 use crate::types::*;
-use core::cmp::min;
 
 pub fn send_vehicle_state(
     can: &CanSocket,
