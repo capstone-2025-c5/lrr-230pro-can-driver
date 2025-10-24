@@ -1,5 +1,6 @@
 use anyhow::Result;
 use socketcan::CanSocket;
+use socketcan::Socket;
 use std::thread;
 use std::time::Duration;
 

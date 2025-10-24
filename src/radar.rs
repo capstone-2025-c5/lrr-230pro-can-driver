@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use socketcan::{CanFrame, CanSocket, EmbeddedFrame, Socket};
+use socketcan::{CanFrame, CanSocket, Socket, StandardId, EmbeddedFrame};
 
 use crate::bitpack::*;
 use crate::types::*;
@@ -7,7 +7,7 @@ use crate::types::*;
 pub fn send_vehicle_state(
     can: &CanSocket,
     veh_speed_mps: f32,
-    yaw_rate_rad_s: f32,
+    _yaw_rate_rad_s: f32,
     gear: VehicleGear,
 ) -> Result<()> {
     // Required minimal set delegates to full senders with neutral defaults.
@@ -49,7 +49,8 @@ pub fn send_esc_sts_run1(
     set_bits_m(&mut d, 49, 1, lon_valid as u64);
     set_bits_m(&mut d, 50, 1, lat_valid as u64);
 
-    let frame = CanFrame::new(ID_ESC_RUN1, &d, false, false)?;
+    let sid = StandardId::new((ID_ESC_RUN1 & 0x7FF) as u16).ok_or(anyhow!("invalid std id"))?;
+    let frame = CanFrame::new(sid, &d).ok_or(anyhow!("failed to create frame"))?;
     can.write_frame(&frame)?;
     Ok(())
 }
@@ -67,7 +68,8 @@ pub fn send_esc_sts_run2(
     set_bits_m(&mut d, 2, 2, (fr_valid & 0x3) as u64);
     set_bits_m(&mut d, 4, 2, (rl_valid & 0x3) as u64);
     set_bits_m(&mut d, 6, 2, (rr_valid & 0x3) as u64);
-    let frame = CanFrame::new(ID_ESC_RUN2, &d, false, false)?;
+    let sid = StandardId::new((ID_ESC_RUN2 & 0x7FF) as u16).ok_or(anyhow!("invalid std id"))?;
+    let frame = CanFrame::new(sid, &d).ok_or(anyhow!("failed to create frame"))?;
     can.write_frame(&frame)?;
     Ok(())
 }
@@ -91,7 +93,8 @@ pub fn send_eps_sts_run(
     set_bits_m(&mut d, 30, 1, cal_ok as u64);
     set_bits_m(&mut d, 31, 1, fault as u64);
 
-    let frame = CanFrame::new(ID_EPS_RUN, &d, false, false)?;
+    let sid = StandardId::new((ID_EPS_RUN & 0x7FF) as u16).ok_or(anyhow!("invalid std id"))?;
+    let frame = CanFrame::new(sid, &d).ok_or(anyhow!("failed to create frame"))?;
     can.write_frame(&frame)?;
     Ok(())
 }
@@ -112,7 +115,8 @@ pub fn send_abs_fault_info(
     set_bits_m(&mut d, 43, 13, enc(rl_kmph) as u64);
     set_bits_m(&mut d, 56, 13, enc(rr_kmph) as u64);
 
-    let frame = CanFrame::new(ID_ABS_FAULT, &d, false, false)?;
+    let sid = StandardId::new((ID_ABS_FAULT & 0x7FF) as u16).ok_or(anyhow!("invalid std id"))?;
+    let frame = CanFrame::new(sid, &d).ok_or(anyhow!("failed to create frame"))?;
     can.write_frame(&frame)?;
     Ok(())
 }
@@ -127,7 +131,8 @@ pub fn send_abs_sts_run1(can: &CanSocket, veh_speed_mps: f32, valid: bool) -> Re
     // abs_sts_veh_spd_valid at startbit 16 (1 bit): 0=Valid, 1=Invalid
     // Our boolean 'valid = true' => put 0; false => 1
     set_bits_m(&mut d, 16, 1, (!valid) as u64);
-    let frame = CanFrame::new(ID_ABS_RUN1, &d, false, false)?;
+    let sid = StandardId::new((ID_ABS_RUN1 & 0x7FF) as u16).ok_or(anyhow!("invalid std id"))?;
+    let frame = CanFrame::new(sid, &d).ok_or(anyhow!("failed to create frame"))?;
     can.write_frame(&frame)?;
     Ok(())
 }
@@ -137,7 +142,8 @@ pub fn send_abs_sts_run2(can: &CanSocket, gear: VehicleGear) -> Result<()> {
     let mut d = [0u8; 8];
     // vcu_sts_gear @ startbit 2, len 2:
     set_bits_m(&mut d, 2, 2, (gear as u8 & 0x3) as u64);
-    let frame = CanFrame::new(ID_ABS_RUN2, &d, false, false)?;
+    let sid = StandardId::new((ID_ABS_RUN2 & 0x7FF) as u16).ok_or(anyhow!("invalid std id"))?;
+    let frame = CanFrame::new(sid, &d).ok_or(anyhow!("failed to create frame"))?;
     can.write_frame(&frame)?;
     Ok(())
 }
@@ -146,20 +152,25 @@ pub fn send_abs_sts_run2(can: &CanSocket, gear: VehicleGear) -> Result<()> {
 pub fn receive_frames(can: &CanSocket) -> Result<()> {
     // Non-blocking single read; wrap in your loop.
     if let Ok(frame) = can.read_frame() {
-        let id = frame.id();
         let data = frame.data();
-        match id {
-            ID_FRS_STATUS => {
+        // convert the frame id to a raw u32 for comparison with our constants
+        let id_raw: u32 = match frame.id() {
+            socketcan::Id::Standard(sid) => sid.as_raw() as u32,
+            socketcan::Id::Extended(eid) => eid.as_raw(),
+        };
+
+        match id_raw {
+            x if x == ID_FRS_STATUS => {
                 let st = parse_frs_status(data)?;
                 println!("FRS Status: {:?}", st);
             }
-            id if (ID_FRS_OBJ_PART1_BASE..=ID_FRS_OBJ_PART1_BASE + 0x0F).contains(&id) => {
-                let idx = id - ID_FRS_OBJ_PART1_BASE;
+            x if (ID_FRS_OBJ_PART1_BASE..=ID_FRS_OBJ_PART1_BASE + 0x0F).contains(&x) => {
+                let idx = x - ID_FRS_OBJ_PART1_BASE;
                 let p1 = parse_object_part1(data)?;
                 println!("Obj{:02} P1: {:?}", idx, p1);
             }
-            id if (ID_FRS_OBJ_PART2_BASE..=ID_FRS_OBJ_PART2_BASE + 0x0F).contains(&id) => {
-                let idx = id - ID_FRS_OBJ_PART2_BASE;
+            x if (ID_FRS_OBJ_PART2_BASE..=ID_FRS_OBJ_PART2_BASE + 0x0F).contains(&x) => {
+                let idx = x - ID_FRS_OBJ_PART2_BASE;
                 let p2 = parse_object_part2(data)?;
                 println!("Obj{:02} P2: {:?}", idx, p2);
             }
